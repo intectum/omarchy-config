@@ -1,0 +1,5 @@
+# Ignore everything, then allow only tracked config.
+*
+!.gitignore
+!hypr/
+!hypr/*.lua
