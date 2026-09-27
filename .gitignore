@@ -3,3 +3,10 @@
 !.gitignore
 !hypr/
 !hypr/*.lua
+!omarchy/
+!omarchy/agents/
+!omarchy/agents/usage-grok
+!systemd/
+!systemd/user/
+!systemd/user/agent-usage-grok.service
+!systemd/user/agent-usage-grok.timer

@@ -1,0 +1,133 @@
+#!/usr/bin/python3
+"""Write the Grok CLI usage record for the Omarchy agents panel.
+
+Local stats come from the turn_completed events in Grok CLI session files
+(~/.grok/sessions/*/*/updates.jsonl). The credit limit comes from the last
+billing snapshot the Grok CLI logged (~/.grok/logs/unified.jsonl); usage only
+moves while the CLI runs, and it logs a fresh snapshot then.
+"""
+
+import json
+import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+GROK_HOME = Path(os.environ.get("GROK_HOME", Path.home() / ".grok"))
+SESSIONS_DIR = GROK_HOME / "sessions"
+LOG_FILE = GROK_HOME / "logs" / "unified.jsonl"
+USAGE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "omarchy" / "agents" / "usage"
+
+now = datetime.now()
+today = now.strftime("%Y-%m-%d")
+recent_dates = [(now - timedelta(days=offset)).strftime("%Y-%m-%d") for offset in range(6, -1, -1)]
+recent = {day: {"date": day, "messageCount": 0} for day in recent_dates}
+today_tokens_by_model = {}
+model_usage = {}
+today_sessions = set()
+total_sessions = set()
+active_days = set()
+today_prompts = 0
+today_total_tokens = 0
+total_prompts = 0
+
+for updates_file in SESSIONS_DIR.glob("*/*/updates.jsonl"):
+  session_id = updates_file.parent.name
+  with open(updates_file, errors="replace") as lines:
+    for line in lines:
+      if '"turn_completed"' not in line:
+        continue
+      try:
+        event = json.loads(line)
+        update = event["params"]["update"]
+        usage = update["usage"]
+        day = datetime.fromtimestamp(int(event["timestamp"])).strftime("%Y-%m-%d")
+      except Exception:
+        continue
+      if update.get("sessionUpdate") != "turn_completed":
+        continue
+
+      total_prompts += 1
+      total_sessions.add(session_id)
+      active_days.add(day)
+      if day == today:
+        today_prompts += 1
+        today_sessions.add(session_id)
+
+      # Grok counts cached reads inside inputTokens.
+      for model, model_tokens in (usage.get("modelUsage") or {"grok": usage}).items():
+        cache_read = int(model_tokens.get("cachedReadTokens") or 0)
+        cache_write = int(model_tokens.get("cacheCreationTokens") or 0)
+        input_tokens = int(model_tokens.get("inputTokens") or 0) - cache_read
+        output_tokens = int(model_tokens.get("outputTokens") or 0)
+        total = input_tokens + output_tokens + cache_read + cache_write
+
+        bucket = model_usage.setdefault(model, {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0,
+        })
+        bucket["inputTokens"] += input_tokens
+        bucket["outputTokens"] += output_tokens
+        bucket["cacheReadInputTokens"] += cache_read
+        bucket["cacheCreationInputTokens"] += cache_write
+
+        if day in recent:
+          recent[day]["messageCount"] += total
+        if day == today:
+          today_total_tokens += total
+          today_tokens_by_model[model] = today_tokens_by_model.get(model, 0) + total
+
+billing = None
+try:
+  with open(LOG_FILE, errors="replace") as lines:
+    for line in lines:
+      if "billing: fetched credits config" in line:
+        billing = line
+  billing = json.loads(billing)["ctx"] if billing else None
+except Exception:
+  billing = None
+
+limits = []
+tier_label = ""
+if billing:
+  tier_label = billing.get("subscriptionTier") or ""
+  config = billing["config"]
+  period = config["currentPeriod"]
+  period_end = datetime.fromisoformat(period["end"])
+  period_length = period_end - datetime.fromisoformat(period["start"])
+  percent = float(config.get("creditUsagePercent") or 0) / 100
+  # Past the logged period nothing has been spent, so roll to the current one.
+  while period_end <= datetime.now(timezone.utc):
+    percent = 0.0
+    period_end += period_length
+  period_name = period["type"].replace("USAGE_PERIOD_TYPE_", "").capitalize()
+  limits.append({"label": f"{period_name} credits", "percent": percent, "resetsAt": period_end.isoformat()})
+
+record = {
+  "schemaVersion": 1,
+  "id": "grok",
+  "name": "Grok",
+  "updatedAt": datetime.now(timezone.utc).isoformat(),
+  "ready": True,
+  "hasLocalStats": True,
+  "todayPrompts": today_prompts,
+  "todaySessions": len(today_sessions),
+  "todayTotalTokens": today_total_tokens,
+  "todayTokensByModel": today_tokens_by_model,
+  "recentDays": [recent[day] for day in recent_dates],
+  "totalPrompts": total_prompts,
+  "totalSessions": len(total_sessions),
+  "activeDays": len(active_days),
+  "activeDates": sorted(active_days),
+  "modelUsage": model_usage,
+  "limits": limits,
+  "tierLabel": tier_label,
+  "usageStatusText": "",
+  "authHelpText": "",
+}
+
+USAGE_DIR.mkdir(parents=True, exist_ok=True)
+temporary_file = USAGE_DIR / ".grok.json.tmp"
+temporary_file.write_text(json.dumps(record, separators=(",", ":")) + "\n")
+temporary_file.replace(USAGE_DIR / "grok.json")

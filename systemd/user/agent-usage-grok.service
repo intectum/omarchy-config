@@ -1,0 +1,6 @@
+[Unit]
+Description=Write Grok usage record for the Omarchy agents panel
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/omarchy/agents/usage-grok
