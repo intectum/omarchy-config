@@ -10,6 +10,9 @@ name = "terminal"
 # The active tab is drawn as panel_bg text on an accent background, so panel_bg
 # has to be dark for it to read - same colors as status-left's "#[fg=black,bg=blue]"
 panel_bg = "black"
+# Navigate mode. The terminal theme leaves this unset, so the highlighted space
+# has no fill. Ristretto accent (#f38d70) darkened so the light row text still reads.
+selection_bg = "#a86452"
 
 [terminal]
 # Matches -c "#{pane_current_path}" on every split, window, and session
