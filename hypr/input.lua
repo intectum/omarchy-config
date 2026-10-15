@@ -1,6 +1,16 @@
 -- Keep only your personal input overrides here. Uncommented settings below
 -- replace Omarchy's defaults.
 
+-- Right-click by pressing the lower-right corner of the touchpad.
+-- Omarchy's default uses a two-finger press instead, so a corner press is a left click.
+hl.config({
+  input = {
+    touchpad = {
+      clickfinger_behavior = false,
+    },
+  },
+})
+
 -- Keyboard layout and options.
 -- See https://wiki.hypr.land/Configuring/Basics/Variables/#input
 -- hl.config({
