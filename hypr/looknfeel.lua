@@ -6,6 +6,14 @@ hl.config({
     -- No gaps between windows.
     gaps_in = 0,
     gaps_out = 0,
+
+    -- Floating windows stick to screen edges and corners while dragged or resized.
+    -- Gaps are the distance in pixels before a snap happens. Smaller is less sensitive.
+    snap = {
+      enabled = true,
+      monitor_gap = 12,
+      window_gap = 10,
+    },
   },
 })
 
