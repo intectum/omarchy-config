@@ -10,3 +10,5 @@
 !systemd/user/
 !systemd/user/agent-usage-grok.service
 !systemd/user/agent-usage-grok.timer
+!herdr/
+!herdr/config.toml
